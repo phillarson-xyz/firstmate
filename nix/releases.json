@@ -1,0 +1,24 @@
+{
+  "treehouse": {
+    "version": "2.0.1",
+    "repo": "kunchenguid/treehouse",
+    "licenseHash": "1b962d20f826f6a758c737f8aa4e8e76dc719b8aa78fcfacdfb46681bb36c2f4",
+    "hashes": {
+      "aarch64-darwin": "7ee5078f3d1f33c01196548797fce65408e459d53530b77d4ba56e074fa1c1a2",
+      "x86_64-darwin": "1cf44580a5837f995e1d3bb74f4fbd3112b642acd20406087d9735a8106112fd",
+      "aarch64-linux": "eaccc9c5b98125df8bd77425598eeecee66cb0371db4eb1cf75f0d813c18fab9",
+      "x86_64-linux": "1d5a32751ab921670103fd201ddb2b91b47338cb13976f45642b827cf8976af2"
+    }
+  },
+  "no-mistakes": {
+    "version": "1.72.0",
+    "repo": "kunchenguid/no-mistakes",
+    "licenseHash": "945016bd37e1ba7211622ef60ee1d23ab727896ba7710edd21e8fbe983863969",
+    "hashes": {
+      "aarch64-darwin": "c3a38e95e050c30ee303806f22fbdc708f945e28d6b249d8e9540de65becb5c7",
+      "x86_64-darwin": "b82a873be9473670f38abe1d9a21a64877c445307d85dfd8d10dfd8d3e1f90d2",
+      "aarch64-linux": "92f402654bdea845ded9cebca41fd565e2ae654bb81c9ce2282e0a2610df8736",
+      "x86_64-linux": "c226b69b8b8115827d2e438ea8b32eaff9b89291a1d2fddc5ef2449017b8d927"
+    }
+  }
+}
