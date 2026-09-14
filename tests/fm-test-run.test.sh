@@ -424,8 +424,12 @@ test_changed_dependency_selection_and_unmapped_failure() {
     tests/test_nix_toolchain.py; do
     printf '\n' >>"$repo/$nix_path"
   done
-  listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD)
-  [ -z "$listed" ] || fail "pinned Nix toolchain paths selected bash suites: $listed"
+  set +e
+  (cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD) >"$tmp/out" 2>"$tmp/err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] || fail "pinned Nix toolchain paths must select without failing, got exit $rc: $(cat "$tmp/err")"
+  [ ! -s "$tmp/out" ] || fail "pinned Nix toolchain paths selected bash suites: $(cat "$tmp/out")"
 
   printf '\n' >>"$repo/bin/fm-quota-choose.sh"
   listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD)

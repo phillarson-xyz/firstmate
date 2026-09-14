@@ -45,8 +45,8 @@ See the [no-mistakes quick start](https://kunchenguid.github.io/no-mistakes/star
   It does not make `data/` tracked.
 - Helper scripts in `bin/` are plain bash.
   Each starts with a usage header comment; keep it accurate when you change behavior.
-  Test scripts and helpers in `tests/` are plain bash too, apart from two Python `unittest` modules, each owned by a different runner.
-  `tests/fm-backend-herdr-eventwait.test.py` covers `bin/backends/herdr-eventwait.py` and is selected through `bin/fm-test-run.sh`'s changed-file map like any other suite.
+  Test scripts and helpers in `tests/` are plain bash too, apart from two Python `unittest` modules, only one of which any runner executes.
+  `tests/fm-backend-herdr-eventwait.test.py` is registered in `bin/fm-test-run.sh`'s changed-file map, but that entry selects the Herdr and backend-dispatch bash families when the module changes; it does not run the module, and no suite or CI lane executes its assertions today.
   `tests/test_nix_toolchain.py` covers `nix/check_toolchain.py` and runs only under `nix flake check`, as the `python-tests` check alongside the `toolchain` check that runs `firstmate-toolchain-check`; `docs/configuration.md` ("Toolchain") owns what that checker verifies.
   Changes to `flake.nix`, `flake.lock`, `nix/`, or `tests/test_nix_toolchain.py` therefore select no bash suite and require a separate `nix flake check` run; each such path is registered by name in the changed-file map, so a new unregistered one still fails closed.
   `bin/fm-lint.sh` covers only bash, so the Python and Nix files are outside its file set.

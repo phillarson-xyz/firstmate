@@ -11,5 +11,7 @@ __pycache__/
 *.pyc
 .env
 config/
+/result
+/result-*
 
 .tools/
