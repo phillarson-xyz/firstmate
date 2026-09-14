@@ -45,8 +45,10 @@ See the [no-mistakes quick start](https://kunchenguid.github.io/no-mistakes/star
   It does not make `data/` tracked.
 - Helper scripts in `bin/` are plain bash.
   Each starts with a usage header comment; keep it accurate when you change behavior.
-  Test scripts and helpers in `tests/` are plain bash too, with one exception owned by the pinned toolchain: `tests/test_nix_toolchain.py` is a Python `unittest` module covering `nix/check_toolchain.py`.
-  It runs under `nix flake check` as the `python-tests` check rather than through `bin/fm-test-run.sh`, alongside the `toolchain` check that runs `firstmate-toolchain-check`; `docs/configuration.md` ("Toolchain") owns what that checker verifies.
+  Test scripts and helpers in `tests/` are plain bash too, apart from two Python `unittest` modules, each owned by a different runner.
+  `tests/fm-backend-herdr-eventwait.test.py` covers `bin/backends/herdr-eventwait.py` and is selected through `bin/fm-test-run.sh`'s changed-file map like any other suite.
+  `tests/test_nix_toolchain.py` covers `nix/check_toolchain.py` and runs only under `nix flake check`, as the `python-tests` check alongside the `toolchain` check that runs `firstmate-toolchain-check`; `docs/configuration.md` ("Toolchain") owns what that checker verifies.
+  Changes to `flake.nix`, `flake.lock`, `nix/`, or `tests/test_nix_toolchain.py` therefore select no bash suite and require a separate `nix flake check` run; each such path is registered by name in the changed-file map, so a new unregistered one still fails closed.
   `bin/fm-lint.sh` covers only bash, so the Python and Nix files are outside its file set.
   `bin/fm-lint.sh` must pass: it is the single owner of the lint definition (the shellcheck file set, config, pinned shellcheck version, pinned actionlint workflow lint, and the backend-purity check rejecting direct Beads CLI calls in core `bin/` scripts), and both CI and the no-mistakes pre-push gate invoke it with no arguments.
   Its header and `--help` output own the exact local lint modes, file-set selection, and analysis flags.

@@ -1308,6 +1308,11 @@ families_for_changed_path() {
       printf '%s\n' real-herdr-gated
       printf '%s\n' backend-dispatch
       ;;
+    flake.nix|flake.lock|nix/axi-tools.nix|nix/release-package.nix|nix/releases.json|nix/check_toolchain.py|nix/axi/package.json|nix/axi/package-lock.json|tests/test_nix_toolchain.py)
+      # The pinned Nix toolchain is verified by `nix flake check`, not by any
+      # bash suite here, so these select no family. Each path is named in full:
+      # an unregistered flake or nix/ path must still fail closed below.
+      ;;
     tests/*.test.sh)
       # A single test file change selects only that script via basename family
       # resolution in the caller; emit a marker family of __script__
