@@ -65,6 +65,7 @@ def firstmate_floors(root):
             "LAVISH_AXI_MIN": "lavish-axi",
         },
         "bin/fm-tasks-axi-lib.sh": {"FM_TASKS_AXI_MIN": "tasks-axi"},
+        "bin/fm-quota-axi-lib.sh": {"FM_QUOTA_AXI_MIN": "quota-axi"},
     }
     floors = {}
     for path, keys in specs.items():
@@ -78,12 +79,18 @@ def firstmate_floors(root):
 
 
 def check(versions, env, runner=run, floors=None):
+    """A declared floor is only enforced if the toolchain pins that tool, so an
+    unpinned floor is an error rather than a silently skipped comparison."""
+    floors = floors or {}
+    untracked = sorted(set(floors) - set(versions))
+    if untracked:
+        raise ValueError(f"floors declared for tools the toolchain does not pin: {', '.join(untracked)}")
     results = []
     for tool, expected in sorted(versions.items()):
         actual = runner([tool, "--version"], env)
         if version(actual) != version(expected):
             raise ValueError(f"{tool}: expected {expected}, got {actual!r}")
-        minimum = (floors or {}).get(tool)
+        minimum = floors.get(tool)
         if minimum and version(actual) < version(minimum):
             raise ValueError(f"{tool}: {actual!r} is below Firstmate floor {minimum}")
         results.append({"tool": tool, "version": expected, "ok": True})

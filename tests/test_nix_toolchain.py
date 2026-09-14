@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import platform
 import subprocess
 import tempfile
 import unittest
@@ -55,6 +56,49 @@ class ToolchainTests(unittest.TestCase):
         with mock.patch.object(subprocess, "run", return_value=failure):
             with self.assertRaisesRegex(RuntimeError, "exited 1"):
                 checker.run(["tool"], {"HOME": "/scratch"})
+
+    def test_pinned_tool_below_its_declared_floor_fails(self):
+        floors = checker.firstmate_floors(ROOT)
+        self.assertIn("quota-axi", floors)
+        major, minor, patch = checker.version(floors["quota-axi"])
+        stale = f"{major}.{minor}.{patch - 1}"
+        pinned = dict(floors, **{"quota-axi": stale})
+        with self.assertRaisesRegex(ValueError, "quota-axi.*below Firstmate floor"):
+            checker.check(pinned, {}, runner=lambda argv, env: pinned[argv[0]], floors=floors)
+
+    def test_declared_floors_are_covered_by_the_pinned_toolchain(self):
+        pins = json.loads((ROOT / "nix/axi/package.json").read_text())["dependencies"]
+        pins.update(
+            (tool, release["version"])
+            for tool, release in json.loads((ROOT / "nix/releases.json").read_text()).items()
+        )
+        for tool, minimum in checker.firstmate_floors(ROOT).items():
+            self.assertIn(tool, pins)
+            self.assertGreaterEqual(checker.version(pins[tool]), checker.version(minimum))
+
+    def test_floor_for_an_unpinned_tool_fails(self):
+        with self.assertRaisesRegex(ValueError, "does not pin: ghost-axi"):
+            checker.check({}, {}, runner=lambda *args: "--lease", floors={"ghost-axi": "1.0.0"})
+
+    def test_darwin_date_keeps_the_bsd_epoch_contract_on_path(self):
+        if platform.system() != "Darwin":
+            self.skipTest("Firstmate only takes the BSD date branch when uname reports Darwin")
+        env = {"PATH": os.environ.get("PATH", ""), "TZ": "UTC0"}
+        epoch = 1700000000
+        stamp = subprocess.run(
+            ["date", "-r", str(epoch), "+%Y%m%d%H%M.%S"],
+            env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        )
+        self.assertEqual(stamp.returncode, 0, stamp.stdout)
+        with tempfile.TemporaryDirectory() as directory:
+            beacon = Path(directory) / "last-watcher-beat"
+            beacon.touch()
+            touched = subprocess.run(
+                ["touch", "-mt", stamp.stdout.strip(), str(beacon)],
+                env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            )
+            self.assertEqual(touched.returncode, 0, touched.stdout)
+            self.assertEqual(int(beacon.stat().st_mtime), epoch)
 
     def test_missing_floor_is_not_ignored(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -63,11 +63,14 @@
               no-mistakes
             ]
             ++ runtime;
-            # Firstmate selects BSD stat flags when uname reports Darwin.
-            # Do not shadow that host contract with GNU coreutils' stat.
+            # Firstmate selects BSD flags whenever uname reports Darwin.
+            # Do not shadow those host contracts with GNU coreutils.
             postBuild = pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
-              rm "$out/bin/stat"
-              ln -s /usr/bin/stat "$out/bin/stat"
+              for host in /usr/bin/stat /bin/date; do
+                tool=$(basename "$host")
+                rm "$out/bin/$tool"
+                ln -s "$host" "$out/bin/$tool"
+              done
             '';
           };
           versions = axi-tools.versions // builtins.mapAttrs (_: value: value.version) releases;
