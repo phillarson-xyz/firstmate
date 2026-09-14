@@ -43,8 +43,8 @@ See the [no-mistakes quick start](https://kunchenguid.github.io/no-mistakes/star
   A local `config/backlog-backend=manual` opt-out forces firstmate's routine backlog updates to hand-editing and stays gitignored; validated secondmate handoffs still delegate through `tasks-axi mv`.
   A local `config/backend` file explicitly overrides runtime auto-detection for new task endpoints and stays gitignored; spawn-supported values are `tmux`, `herdr` (which has its own required CI lane), and `zellij`, `orca`, and `cmux`, which remain experimental with no dedicated real-backend CI lane, while `codex-app` is documented only in `docs/codex-app-backend.md`.
   It does not make `data/` tracked.
-- Helper scripts in `bin/` are plain bash.
-  Each starts with a usage header comment; keep it accurate when you change behavior.
+- Helper scripts in `bin/` are primarily bash, alongside the Python helpers already tracked there.
+  Each starts with a usage header comment, whichever language it is in; keep it accurate when you change behavior.
   Test scripts and helpers in `tests/` are plain bash too, apart from two Python `unittest` modules, only one of which any runner executes.
   `tests/fm-backend-herdr-eventwait.test.py` is registered in `bin/fm-test-run.sh`'s changed-file map, but that entry selects the Herdr and backend-dispatch bash families when the module changes; it does not run the module, and no suite or CI lane executes its assertions today.
   `tests/test_nix_toolchain.py` covers `nix/check_toolchain.py` and runs only under `nix flake check`, as the `python-tests` check alongside the `toolchain` check that runs `firstmate-toolchain-check`; `docs/configuration.md` ("Toolchain") owns what that checker verifies.

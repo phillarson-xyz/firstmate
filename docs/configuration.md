@@ -459,9 +459,9 @@ It installs automatically supported tools only after you say go; manual-only too
 Required tools come in two parts: a universal toolchain every home needs regardless of backend, and a per-backend delta that follows the runtime backend actually resolved for this home.
 The essential universal toolchain is node, git, gh with GitHub auth via `gh auth login`, no-mistakes v1.46.0 or newer, compatible gh-axi, chrome-devtools-axi, compatible tasks-axi per "Backlog backend" above, and compatible quota-axi.
 Firstmate also tracks a reproducible pinned-toolchain entry point in `flake.nix`.
-`firstmate-toolchain-check` reads `nix/` manifests from this checkout and verifies
-declared version floors plus binary/CLI feature compatibility before runtime use.
-Enter that shell with a non-login command such as `nix develop -c <tool>` or `nix develop -c bash -c '<command>'`.
+`firstmate-toolchain-check` reads `nix/` manifests from this checkout and verifies declared version floors plus binary/CLI feature compatibility before runtime use.
+Run that checker on its own with `nix run .#check`, which builds the pinned toolchain and reports only its floor and feature verdict; the broader `nix flake check` gate evaluates every flake output and additionally runs the unit tests covering the checker itself.
+Enter that pinned shell with a non-login command such as `nix develop -c <tool>` or `nix develop -c bash -c '<command>'`.
 On macOS a login shell runs `/etc/profile`, whose `path_helper` keeps inherited `PATH` entries but demotes them below `/etc/paths`, so the pinned toolchain stops winning lookups for tools the system also ships and `git`, `python3`, `bash`, and `curl` silently resolve to `/usr/bin` or `/bin` with no command-not-found error to signal it.
 A nix-darwin host removes them outright instead of reordering them: `/etc/profile` sources `/etc/bashrc`, which sources that system's generated `set-environment` and assigns `PATH` from a literal before the non-interactive early return, so under `nix develop -c bash -lc ...` every dev-shell entry is gone and a spawned worker shell sees no Firstmate tools at all.
 Both are properties of the system profile chain, not of any one home's shell configuration; when a login shell is unavoidable, re-prepend the toolchain directory after profile processing rather than before it.
