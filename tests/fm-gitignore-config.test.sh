@@ -56,6 +56,24 @@ test_scratchpad_prefix_is_ignored() {
   pass "names starting with scratchpad are gitignored"
 }
 
+test_nix_output_links_are_ignored_at_the_repo_root() {
+  # nix build writes ./result and ./result-<name> into the repo root. An
+  # untracked one dirties the working tree and widens changed-file selection.
+  local sample nested
+  for sample in result result-1 result-toolchain; do
+    git -C "$ROOT" check-ignore -q "$sample" \
+      || fail "git does not ignore $sample (nix build output links must be ignored)"
+  done
+  # Control: the rules are root-anchored and exact, so a same-named path in a
+  # subdirectory and a longer root name must both remain visible.
+  nested="docs/$(random_leaf result)"
+  git -C "$ROOT" check-ignore -q "$nested" \
+    && fail "git unexpectedly ignores $nested (result rules must be root-anchored)"
+  git -C "$ROOT" check-ignore -q results \
+    && fail "git unexpectedly ignores results (must not match the result rules)"
+  pass "nix build output links are gitignored at the repo root only"
+}
+
 test_scratchpad_prefix_ignores_no_tracked_path() {
   local tracked
   tracked=$(git -C "$ROOT" ls-files | grep -E '(^|/)scratchpad' || true)
@@ -87,5 +105,6 @@ test_scratchpad2_does_not_dirty_porcelain() {
 test_config_dir_ignored_as_category
 test_unrelated_path_stays_visible
 test_scratchpad_prefix_is_ignored
+test_nix_output_links_are_ignored_at_the_repo_root
 test_scratchpad_prefix_ignores_no_tracked_path
 test_scratchpad2_does_not_dirty_porcelain

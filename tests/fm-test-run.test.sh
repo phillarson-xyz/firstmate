@@ -160,6 +160,16 @@ init_changed_fixture_repo() {
   : >"$repo/docs/fm-test-isolation-proof.md"
   : >"$repo/CONTRIBUTING.md"
   : >"$repo/src/unmapped.ts"
+  mkdir -p "$repo/nix/axi"
+  : >"$repo/flake.nix"
+  : >"$repo/flake.lock"
+  : >"$repo/nix/axi-tools.nix"
+  : >"$repo/nix/release-package.nix"
+  : >"$repo/nix/releases.json"
+  : >"$repo/nix/check_toolchain.py"
+  : >"$repo/nix/axi/package.json"
+  : >"$repo/nix/axi/package-lock.json"
+  : >"$repo/tests/test_nix_toolchain.py"
   git -C "$repo" init -q
   git -C "$repo" add .
   git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm baseline
@@ -401,6 +411,43 @@ test_changed_dependency_selection_and_unmapped_failure() {
   git -C "$repo" add bin/fm-timeout-lib.sh
   git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm timeout-lib-change
 
+  local nix_path
+  for nix_path in \
+    flake.nix \
+    flake.lock \
+    nix/axi-tools.nix \
+    nix/release-package.nix \
+    nix/releases.json \
+    nix/check_toolchain.py \
+    nix/axi/package.json \
+    nix/axi/package-lock.json \
+    tests/test_nix_toolchain.py; do
+    printf '\n' >>"$repo/$nix_path"
+  done
+  set +e
+  (cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD) >"$tmp/out" 2>"$tmp/err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] || fail "pinned Nix toolchain paths must select without failing, got exit $rc: $(cat "$tmp/err")"
+  [ ! -s "$tmp/out" ] || fail "pinned Nix toolchain paths selected bash suites: $(cat "$tmp/out")"
+
+  printf '\n' >>"$repo/bin/fm-quota-choose.sh"
+  listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD)
+  assert_contains "$listed" "tests/fm-quota-choose.test.sh" \
+    "a change mixing Nix toolchain paths with a bash source keeps the bash coverage"
+  git -C "$repo" add -A
+  git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm nix-toolchain-change
+
+  : >"$repo/nix/unregistered.nix"
+  set +e
+  (cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD) >"$tmp/out" 2>"$tmp/err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 2 ] || fail "an unregistered nix/ path must fail with exit 2, got $rc"
+  grep -Fq 'no changed-test mapping for source path: nix/unregistered.nix' "$tmp/err" \
+    || fail "unregistered nix/ path failure is not actionable: $(cat "$tmp/err")"
+  rm -f "$repo/nix/unregistered.nix"
+
   printf '\n' >>"$repo/src/unmapped.ts"
   set +e
   (cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD) >"$tmp/out" 2>"$tmp/err"
@@ -414,7 +461,7 @@ test_changed_dependency_selection_and_unmapped_failure() {
   listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD)
   [ -z "$listed" ] || fail "a retired unmapped source without consumers selected tests: $listed"
   rm -rf "$tmp"
-  pass "changed selection covers dependents, fails closed for live unmapped source, and accepts retired unconsumed source"
+  pass "changed selection covers dependents, routes pinned Nix paths outside the bash suites, fails closed for live unmapped source, and accepts retired unconsumed source"
 }
 
 # A direct test reference is per-script evidence. Widening it to the referencing
