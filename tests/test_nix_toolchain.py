@@ -18,6 +18,8 @@ assert SPEC is not None and SPEC.loader is not None
 checker = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(checker)
 
+BELOW_EVERY_FLOOR = "0.0.0"
+
 
 class ToolchainTests(unittest.TestCase):
     def test_versions_are_unambiguous(self):
@@ -61,11 +63,28 @@ class ToolchainTests(unittest.TestCase):
     def test_pinned_tool_below_its_declared_floor_fails(self):
         floors = checker.firstmate_floors(ROOT)
         self.assertIn("quota-axi", floors)
-        major, minor, patch = checker.version(floors["quota-axi"])
-        stale = f"{major}.{minor}.{patch - 1}"
-        pinned = dict(floors, **{"quota-axi": stale})
+        pinned = dict(floors, **{"quota-axi": BELOW_EVERY_FLOOR})
         with self.assertRaisesRegex(ValueError, "quota-axi.*below Firstmate floor"):
             checker.check(pinned, {}, runner=lambda argv, env: pinned[argv[0]], floors=floors)
+
+    def test_a_floor_ending_in_zero_patch_still_rejects_an_older_pin(self):
+        for minimum, actual in (("0.2.0", "0.1.99"), ("1.0.0", "0.9.9"), ("0.1.29", "0.1.28")):
+            with self.subTest(minimum=minimum):
+                with self.assertRaisesRegex(ValueError, f"below Firstmate floor {minimum}"):
+                    checker.check(
+                        {"quota-axi": actual}, {},
+                        runner=lambda argv, env, actual=actual: actual,
+                        floors={"quota-axi": minimum},
+                    )
+
+    def test_a_floor_ending_in_zero_patch_accepts_the_floor_itself(self):
+        replies = {"--version": "0.2.0", "get": "--lease", "update": "--archive-body", "mv": "[<id>...]"}
+        results = checker.check(
+            {"quota-axi": "0.2.0"}, {},
+            runner=lambda argv, env: replies[argv[1]],
+            floors={"quota-axi": "0.2.0"},
+        )
+        self.assertIn({"tool": "quota-axi", "version": "0.2.0", "ok": True}, results)
 
     def test_declared_floors_are_covered_by_the_pinned_toolchain(self):
         pins = json.loads((ROOT / "nix/axi/package.json").read_text())["dependencies"]
@@ -130,8 +149,7 @@ class ToolchainTests(unittest.TestCase):
 
     def test_cli_enforces_declared_floors_against_an_explicit_root(self):
         floors = checker.firstmate_floors(ROOT)
-        major, minor, patch = checker.version(floors["quota-axi"])
-        pinned = dict(floors, **{"quota-axi": f"{major}.{minor}.{patch - 1}"})
+        pinned = dict(floors, **{"quota-axi": BELOW_EVERY_FLOOR})
         with tempfile.TemporaryDirectory() as directory:
             stubs = self.stub_tools(directory, pinned)
             manifest = Path(directory) / "versions.json"
