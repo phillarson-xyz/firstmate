@@ -461,6 +461,8 @@ The essential universal toolchain is node, git, gh with GitHub auth via `gh auth
 Firstmate also tracks a reproducible pinned-toolchain entry point in `flake.nix`.
 `firstmate-toolchain-check` reads `nix/` manifests from this checkout and verifies
 declared version floors plus binary/CLI feature compatibility before runtime use.
+Enter that shell with a non-login command such as `nix develop -c <tool>` or `nix develop -c bash -c '<command>'`.
+On macOS a login shell runs `/etc/profile`, whose `path_helper` rebuilds `PATH` from `/etc/paths` instead of appending, so `nix develop -c bash -lc ...` silently drops every toolchain entry and a spawned worker shell sees no Firstmate tools; when a login shell is unavoidable, re-prepend the toolchain directory after profile processing rather than before it.
 [`bin/fm-bootstrap.sh`](../bin/fm-bootstrap.sh) owns the axi-family floor policy and the gh-axi and lavish-axi floors, while [`bin/fm-tasks-axi-lib.sh`](../bin/fm-tasks-axi-lib.sh) and [`bin/fm-quota-axi-lib.sh`](../bin/fm-quota-axi-lib.sh) hold their own tools' floor constants.
 This section is the single owner of that universal toolchain list; backend guides' prerequisites point here and add only their backend-specific tools.
 In that list, no-mistakes runs the validation pipeline, gh-axi and chrome-devtools-axi cover GitHub and browser operations, and tasks-axi plus quota-axi back backlog mutations and quota-aware array dispatch.
