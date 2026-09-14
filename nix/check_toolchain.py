@@ -105,11 +105,11 @@ def check(versions, env, runner=run, floors=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
-    parser.add_argument("--firstmate-root", type=Path, help="also compare against this checkout's version floors (read-only)")
+    parser.add_argument("--firstmate-root", type=Path, required=True, help="compare against this checkout's version floors (read-only)")
     args = parser.parse_args()
     try:
         versions = json.loads(args.manifest.read_text())
-        floors = firstmate_floors(args.firstmate_root.resolve()) if args.firstmate_root else None
+        floors = firstmate_floors(args.firstmate_root.resolve())
         with tempfile.TemporaryDirectory(prefix="firstmate-toolchain-check-") as directory:
             results = check(versions, isolated_env(Path(directory)), floors=floors)
         print(json.dumps({"ok": True, "checks": results}, indent=2))

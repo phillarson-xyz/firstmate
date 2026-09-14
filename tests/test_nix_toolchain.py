@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import platform
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -99,6 +100,49 @@ class ToolchainTests(unittest.TestCase):
             )
             self.assertEqual(touched.returncode, 0, touched.stdout)
             self.assertEqual(int(beacon.stat().st_mtime), epoch)
+
+    def run_checker(self, argv, stubs=None):
+        environment = dict(os.environ)
+        if stubs is not None:
+            environment["PATH"] = os.pathsep.join([str(stubs), environment.get("PATH", "")])
+        return subprocess.run(
+            [sys.executable, str(ROOT / "nix/check_toolchain.py"), *argv],
+            env=environment, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+
+    def stub_tools(self, directory, versions):
+        stubs = Path(directory) / "stub-bin"
+        stubs.mkdir()
+        for tool, printed in versions.items():
+            binary = stubs / tool
+            binary.write_text(f"#!/bin/sh\necho '{tool} {printed}'\n")
+            binary.chmod(0o755)
+        return stubs
+
+    def test_cli_refuses_to_report_success_without_a_firstmate_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "versions.json"
+            manifest.write_text(json.dumps({}))
+            done = self.run_checker(["--manifest", str(manifest)])
+        self.assertNotEqual(done.returncode, 0)
+        self.assertEqual(done.stdout, "")
+        self.assertIn("--firstmate-root", done.stderr)
+
+    def test_cli_enforces_declared_floors_against_an_explicit_root(self):
+        floors = checker.firstmate_floors(ROOT)
+        major, minor, patch = checker.version(floors["quota-axi"])
+        pinned = dict(floors, **{"quota-axi": f"{major}.{minor}.{patch - 1}"})
+        with tempfile.TemporaryDirectory() as directory:
+            stubs = self.stub_tools(directory, pinned)
+            manifest = Path(directory) / "versions.json"
+            manifest.write_text(json.dumps(pinned))
+            done = self.run_checker(
+                ["--manifest", str(manifest), "--firstmate-root", str(ROOT)], stubs=stubs
+            )
+        self.assertEqual(done.returncode, 1, done.stderr)
+        payload = json.loads(done.stdout)
+        self.assertFalse(payload["ok"])
+        self.assertRegex(payload["error"], r"quota-axi.*below Firstmate floor")
 
     def test_missing_floor_is_not_ignored(self):
         with tempfile.TemporaryDirectory() as directory:
