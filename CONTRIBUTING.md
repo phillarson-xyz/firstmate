@@ -49,7 +49,7 @@ See the [no-mistakes quick start](https://kunchenguid.github.io/no-mistakes/star
   `tests/fm-backend-herdr-eventwait.test.py` is registered in `bin/fm-test-run.sh`'s changed-file map, but that entry selects the Herdr and backend-dispatch bash families when the module changes; it does not run the module, and no suite or CI lane executes its assertions today.
   `tests/test_nix_toolchain.py` covers `nix/check_toolchain.py` and runs only under `nix flake check`, as the `python-tests` check alongside the `toolchain` check that runs `firstmate-toolchain-check`; `docs/configuration.md` ("Toolchain") owns what that checker verifies.
   Changes to `flake.nix`, `flake.lock`, `nix/`, or `tests/test_nix_toolchain.py` therefore select no bash suite and require a separate `nix flake check` run; each such path is registered by name in the changed-file map, so a new unregistered one still fails closed.
-  `bin/fm-lint.sh` covers only bash, so the Python and Nix files are outside its file set.
+  `bin/fm-lint.sh`'s shellcheck file set is bash-only, so the Python and Nix files are outside it.
   `bin/fm-lint.sh` must pass: it is the single owner of the lint definition (the shellcheck file set, config, pinned shellcheck version, pinned actionlint workflow lint, and the backend-purity check rejecting direct Beads CLI calls in core `bin/` scripts), and both CI and the no-mistakes pre-push gate invoke it with no arguments.
   Its header and `--help` output own the exact local lint modes, file-set selection, and analysis flags.
   A malformed `.github/workflows/*.yml`, including a self-broken `ci.yml`, fails that local lint path before merge because a broken workflow cannot report its own breakage.
