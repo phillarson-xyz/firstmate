@@ -945,14 +945,21 @@ test_installer_rejects_unsupported_platform() {
 }
 
 test_missing_shellcheck_fails_closed() {
-  local tmp fakebin out rc tool
+  # A checkout with no flake.nix has no pinned dev shell to fall back on, so
+  # this is the fail-closed half of the resolution order the owner documents.
+  local tmp fakebin lint_copy out rc tool
   tmp=$(fm_test_tmproot fm-lint-noshellcheck)
   fakebin=$(fm_fakebin "$tmp")
   for tool in bash dirname; do
     ln -s "$(command -v "$tool")" "$fakebin/$tool"
   done
+  mkdir -p "$tmp/repo/bin"
+  lint_copy="$tmp/repo/bin/fm-lint.sh"
+  cp "$LINT" "$lint_copy"
+  chmod +x "$lint_copy"
+  [ ! -e "$tmp/repo/flake.nix" ] || fail "fixture unexpectedly carries a flake"
   rc=0
-  out=$(PATH="$fakebin" CI=true GITHUB_ACTIONS=true "$LINT" 2>&1) || rc=$?
+  out=$(PATH="$fakebin" CI=true GITHUB_ACTIONS=true "$lint_copy" 2>&1) || rc=$?
   [ "$rc" -eq 1 ] || fail "missing ShellCheck expected exit 1, got $rc"$'\n'"$out"
   assert_contains "$out" "ShellCheck not found" \
     "missing ShellCheck did not name the required linter"
@@ -961,6 +968,90 @@ test_missing_shellcheck_fails_closed() {
   assert_contains "$out" "fm-install-shellcheck.sh" \
     "missing ShellCheck did not name the pinned installer"
   pass "missing ShellCheck fails closed"
+}
+
+test_missing_shellcheck_enters_the_pinned_dev_shell() {
+  # The gate runs bin/fm-lint.sh from a daemon environment that carries neither
+  # pinned linter. With flake.nix present the owner must re-run itself in the
+  # repository's pinned dev shell, replaying the original arguments, instead of
+  # failing closed as it must when no such shell exists.
+  local tmp fakebin repo lint_copy out rc tool
+  tmp=$(fm_test_tmproot fm-lint-nixshell)
+  fakebin=$(fm_fakebin "$tmp")
+  for tool in bash dirname; do
+    ln -s "$(command -v "$tool")" "$fakebin/$tool"
+  done
+  cat > "$fakebin/nix" <<'SH'
+#!/usr/bin/env bash
+printf 'stub-nix:'
+printf ' %s' "$@"
+printf '\n'
+SH
+  chmod +x "$fakebin/nix"
+  mkdir -p "$tmp/repo/bin"
+  repo=$(cd "$tmp/repo" && pwd -P)
+  lint_copy="$repo/bin/fm-lint.sh"
+  cp "$LINT" "$lint_copy"
+  chmod +x "$lint_copy"
+  printf '{ }\n' > "$repo/flake.nix"
+  rc=0
+  out=$(PATH="$fakebin" CI='' GITHUB_ACTIONS='' IN_NIX_SHELL='' \
+    "$lint_copy" --fast 2>&1) || rc=$?
+  [ "$rc" -eq 0 ] || fail "pinned dev shell delegation expected exit 0, got $rc"$'\n'"$out"
+  assert_contains "$out" "entering the pinned dev shell from flake.nix" \
+    "fm-lint.sh did not report entering the pinned dev shell"
+  assert_contains "$out" "stub-nix: develop --no-write-lock-file $repo --command $lint_copy --fast" \
+    "fm-lint.sh did not replay its invocation inside the repository's pinned dev shell"
+  pass "missing ShellCheck re-runs the lint owner in the pinned dev shell"
+}
+
+test_missing_actionlint_alone_enters_the_pinned_dev_shell() {
+  # ShellCheck present and actionlint absent is its own daemon-environment case:
+  # the default run also validates workflows, so the pinned dev shell must be
+  # entered for the missing linter even though ShellCheck itself resolved. The
+  # message must name actionlint so a missing dependency stays diagnosable.
+  local tmp fakebin repo lint_copy out rc tool
+  tmp=$(fm_test_tmproot fm-lint-noactionlint)
+  fakebin=$(fm_fakebin "$tmp")
+  for tool in bash dirname; do
+    ln -s "$(command -v "$tool")" "$fakebin/$tool"
+  done
+  cat > "$fakebin/shellcheck" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = --version ]; then
+  printf 'ShellCheck - shell script analysis tool\nversion: 0.11.0\n'
+  exit 0
+fi
+exit 0
+SH
+  chmod +x "$fakebin/shellcheck"
+  cat > "$fakebin/nix" <<'SH'
+#!/usr/bin/env bash
+printf 'stub-nix:'
+printf ' %s' "$@"
+printf '\n'
+SH
+  chmod +x "$fakebin/nix"
+  command -v actionlint >/dev/null 2>&1 \
+    && [ -x "$fakebin/actionlint" ] \
+    && fail "fixture unexpectedly provides actionlint"
+  mkdir -p "$tmp/repo/bin"
+  repo=$(cd "$tmp/repo" && pwd -P)
+  lint_copy="$repo/bin/fm-lint.sh"
+  cp "$LINT" "$lint_copy"
+  chmod +x "$lint_copy"
+  printf '{ }\n' > "$repo/flake.nix"
+  rc=0
+  out=$(PATH="$fakebin" CI='' GITHUB_ACTIONS='' IN_NIX_SHELL='' \
+    "$lint_copy" 2>&1) || rc=$?
+  [ "$rc" -eq 0 ] || fail "actionlint-only delegation expected exit 0, got $rc"$'\n'"$out"
+  assert_contains "$out" "actionlint not on PATH" \
+    "fm-lint.sh did not name actionlint as the missing pinned linter"
+  assert_contains "$out" "entering the pinned dev shell from flake.nix" \
+    "fm-lint.sh did not report entering the pinned dev shell for actionlint"
+  assert_contains "$out" "stub-nix: develop --no-write-lock-file $repo --command $lint_copy" \
+    "fm-lint.sh did not replay its invocation inside the repository's pinned dev shell"
+  pass "missing actionlint alone re-runs the lint owner in the pinned dev shell"
 }
 
 test_rejects_wrong_shellcheck_version() {
@@ -1376,6 +1467,8 @@ test_installer_falls_back_to_shasum
 test_installer_prefers_sha256sum_over_shasum
 test_installer_rejects_unsupported_platform
 test_missing_shellcheck_fails_closed
+test_missing_shellcheck_enters_the_pinned_dev_shell
+test_missing_actionlint_alone_enters_the_pinned_dev_shell
 test_rejects_wrong_shellcheck_version
 test_catches_a_real_lint_defect
 test_rejects_direct_beads_cli_invocations

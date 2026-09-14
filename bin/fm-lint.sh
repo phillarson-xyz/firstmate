@@ -20,6 +20,11 @@
 # malformed GitHub workflow, including a self-broken ci.yml, fails locally
 # before merge instead of only failing to run as CI.
 #
+# When either pinned linter is missing from PATH, this owner re-runs itself
+# inside the pinned dev shell from flake.nix, which carries both. A host without
+# nix or without that flake still fails closed with the installer instructions,
+# and an installed wrong version is refused rather than replaced.
+#
 # With no explicit paths, the file set and source-following posture depend
 # on context:
 #   - In CI (GITHUB_ACTIONS=true or CI=true), on the main branch, or when no
@@ -68,6 +73,9 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 SELF="$SELF_DIR/fm-lint.sh"
 ROOT="$(cd "$SELF_DIR/.." && pwd -P)"
 cd "$ROOT" || exit 1
+# Snapshot the caller's arguments before option parsing consumes them, so the
+# pinned dev shell re-entry below replays the same invocation.
+FM_LINT_ARGV=("$@")
 
 FM_LINT_WORKER_SHELLCHECK_PID=
 # shellcheck disable=SC2329 # Registered by the private worker's signal traps.
@@ -528,6 +536,61 @@ if [ "$LIST_FILES" -eq 1 ]; then
   }
   [ "$ROOT_COUNT" -eq 0 ] || printf '%s\n' "${ROOTS[@]}"
   exit 0
+fi
+
+# fm_lint_pinned_shell_nix prints the nix executable that can enter this
+# repository's pinned dev shell. PATH wins; the two fallbacks are the stable
+# multi-user and nix-darwin profile locations, which survive toolchain bumps,
+# unlike a /nix/store path. Returns nonzero when the host has no nix.
+fm_lint_pinned_shell_nix() {
+  local candidate
+  if candidate=$(command -v nix 2>/dev/null); then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  for candidate in \
+    /nix/var/nix/profiles/default/bin/nix \
+    "${HOME:-}/.nix-profile/bin/nix" \
+    /run/current-system/sw/bin/nix
+  do
+    [ -x "$candidate" ] || continue
+    printf '%s\n' "$candidate"
+    return 0
+  done
+  return 1
+}
+
+# fm_lint_missing_pinned_tools names the pinned linters this invocation needs
+# that are absent from PATH. actionlint is needed only when this run will also
+# validate workflows, which is the same explicit-paths condition
+# fm_lint_run_workflows uses, so targeting one shell root never demands it.
+# Only ABSENCE is reported: a tool that is installed at the wrong version stays
+# listed nowhere here, so it still reaches its owner's exact-version refusal
+# instead of being silently replaced by the pinned build.
+fm_lint_missing_pinned_tools() {
+  local missing=
+  command -v shellcheck >/dev/null 2>&1 || missing=ShellCheck
+  if [ "$EXPLICIT_PATHS" -eq 0 ] && ! command -v actionlint >/dev/null 2>&1; then
+    missing="${missing:+$missing and }actionlint"
+  fi
+  printf '%s' "$missing"
+}
+
+# flake.nix pins this repository's own ShellCheck and actionlint builds in one
+# dev shell. When the host is missing either one, re-run there instead of
+# failing, so a Nix host needs no separate global install and still lints under
+# the exact pins. IN_NIX_SHELL stops a second entry from recursing when the
+# shell itself cannot supply a pin, which then fails closed in the owner that
+# needs it.
+FM_LINT_MISSING=$(fm_lint_missing_pinned_tools)
+if [ -n "$FM_LINT_MISSING" ] \
+  && [ -z "${IN_NIX_SHELL:-}" ] \
+  && [ -f "$ROOT/flake.nix" ] \
+  && NIX_BIN=$(fm_lint_pinned_shell_nix); then
+  printf 'fm-lint.sh: %s not on PATH; entering the pinned dev shell from flake.nix\n' \
+    "$FM_LINT_MISSING" >&2
+  exec "$NIX_BIN" develop --no-write-lock-file "$ROOT" \
+    --command "$SELF" ${FM_LINT_ARGV[@]+"${FM_LINT_ARGV[@]}"}
 fi
 
 if ! command -v shellcheck >/dev/null 2>&1; then
