@@ -23,7 +23,10 @@
 # When either pinned linter is missing from PATH, this owner re-runs itself
 # inside the pinned dev shell from flake.nix, which carries both. A host without
 # nix or without that flake still fails closed with the installer instructions,
-# and an installed wrong version is refused rather than replaced.
+# which the delegation notice also prints so a failed shell entry stays
+# diagnosable. When no pin is missing there is no delegation, so an installed
+# wrong version is refused rather than replaced; when the shell is entered for
+# an absent pin, its builds take precedence over a divergent installed one.
 #
 # With no explicit paths, the file set and source-following posture depend
 # on context:
@@ -564,9 +567,11 @@ fm_lint_pinned_shell_nix() {
 # that are absent from PATH. actionlint is needed only when this run will also
 # validate workflows, which is the same explicit-paths condition
 # fm_lint_run_workflows uses, so targeting one shell root never demands it.
-# Only ABSENCE is reported: a tool that is installed at the wrong version stays
-# listed nowhere here, so it still reaches its owner's exact-version refusal
-# instead of being silently replaced by the pinned build.
+# Only ABSENCE is reported: a tool installed at the wrong version is listed
+# nowhere here, so when nothing is missing no delegation happens and that tool
+# reaches its owner's exact-version refusal. When some other pin is absent the
+# dev shell is entered anyway, and its pinned builds shadow the divergent
+# installed one.
 fm_lint_missing_pinned_tools() {
   local missing=
   command -v shellcheck >/dev/null 2>&1 || missing=ShellCheck
@@ -589,6 +594,8 @@ if [ -n "$FM_LINT_MISSING" ] \
   && NIX_BIN=$(fm_lint_pinned_shell_nix); then
   printf 'fm-lint.sh: %s not on PATH; entering the pinned dev shell from flake.nix\n' \
     "$FM_LINT_MISSING" >&2
+  printf 'fm-lint.sh: if that shell cannot be entered, install ShellCheck %s with bin/fm-install-shellcheck.sh <destination-directory> and actionlint with bin/fm-install-actionlint.sh <destination-directory>, then put that directory on PATH.\n' \
+    "$REQUIRED_SHELLCHECK" >&2
   exec "$NIX_BIN" develop --no-write-lock-file "$ROOT" \
     --command "$SELF" ${FM_LINT_ARGV[@]+"${FM_LINT_ARGV[@]}"}
 fi

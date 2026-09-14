@@ -107,6 +107,7 @@
               toolchain-check
               pkgs.shellcheck
               pkgs.actionlint
+              pkgs.perl
               pkgs.nixfmt
             ];
             # No shellHook: shell entry must not initialize repos, trust, or services.

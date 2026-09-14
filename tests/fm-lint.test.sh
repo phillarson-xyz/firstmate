@@ -1032,9 +1032,7 @@ printf ' %s' "$@"
 printf '\n'
 SH
   chmod +x "$fakebin/nix"
-  command -v actionlint >/dev/null 2>&1 \
-    && [ -x "$fakebin/actionlint" ] \
-    && fail "fixture unexpectedly provides actionlint"
+  [ ! -e "$fakebin/actionlint" ] || fail "fixture unexpectedly provides actionlint"
   mkdir -p "$tmp/repo/bin"
   repo=$(cd "$tmp/repo" && pwd -P)
   lint_copy="$repo/bin/fm-lint.sh"
