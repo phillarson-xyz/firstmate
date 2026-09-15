@@ -198,6 +198,29 @@ fm_cursor_argv0_for_pid() {  # <pid> [comm-fallback]
   printf '%s\n' "$fallback"
 }
 
+# True when basename $1 is a bare interpreter - a program that identifies
+# nothing by itself because what it runs arrives as its script argument.
+#
+# The shared owner for TWO callers: Cursor identity below and the session-lock
+# ancestry walk in bin/fm-session-lock-lib.sh, which sources this file. They ask
+# the same question of the same process in the same shell, so a second copy
+# would let the two disagree about what an interpreter even is. It is NOT
+# fleet-wide: bin/fm-harness.sh (its node*|python* verdict arm) and
+# bin/fm-gemini-lib.sh (its argv[0] arm) still carry their own lists, and a
+# change here does not reach them.
+#
+# Decided on the basename alone, never on a path: tool bridges ship as native
+# binaries below node_modules, so their paths say "node" while the process is no
+# interpreter. Versioned spellings (node22, node-20, node-v20, python3.12) are
+# interpreters and stay; a node prefix followed by a name rather than a version
+# - node-gyp, nodemon - is not one, and trusting those would reopen that hole.
+fm_is_bare_interpreter() {  # <basename>
+  case "$1" in
+    node|nodejs|node[0-9]*|node-[0-9]*|node-v[0-9]*|python|python[0-9]*) return 0 ;;
+  esac
+  return 1
+}
+
 fm_cursor_argv0_is_cursor() {  # <argv0>
   local argv0=$1
   [ -n "$argv0" ] || return 1
@@ -228,13 +251,13 @@ fm_cursor_process_matches() {  # <comm> <args> [argv0]
   base=${base#-}
   case "$base" in
     cursor-agent) return 0 ;;
-    agent|MainThread|node|node-*|node[0-9]*|python|python[0-9]*|python[0-9].[0-9]*)
-      fm_cursor_argv0_is_cursor "$argv0" && return 0
-      # A legacy alias may also be reported by its own path in comm.
-      fm_cursor_path_is_cursor "$comm" && return 0
-      return 1
-      ;;
   esac
+  if [ "$base" = agent ] || [ "$base" = MainThread ] || fm_is_bare_interpreter "$base"; then
+    fm_cursor_argv0_is_cursor "$argv0" && return 0
+    # A legacy alias may also be reported by its own path in comm.
+    fm_cursor_path_is_cursor "$comm" && return 0
+    return 1
+  fi
   # A version-named or otherwise renamed executable still identifies through
   # its install path.
   case "$comm" in */*) fm_cursor_path_is_cursor "$comm" && return 0 ;; esac
