@@ -74,8 +74,12 @@ fm_harness_process_matches() {  # <comm> <args>
     return 0
   fi
   # Bare interpreter (e.g. node): match the harness name in its script path.
-  case "$comm" in
-    *node*|*python*)
+  # Decided on the executable's own basename, never on the whole path. Tool
+  # bridges ship as native binaries below node_modules, or below package
+  # directories that merely name a harness, so their paths say "node" while the
+  # process is not an interpreter and must not be read as one.
+  case "$base" in
+    node|nodejs|python|python[0-9]|python[0-9].*)
       if printf '%s' "$args" | grep -qE "$FM_HARNESS_RE"; then
         case "$args" in *claude*) FM_HARNESS_IS_CLAUDE=1 ;; esac
         return 0

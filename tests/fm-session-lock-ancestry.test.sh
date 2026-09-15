@@ -180,6 +180,106 @@ SH
   pass "session-lock: ordinary script paths under a harness directory are not harness processes"
 }
 
+# The bare-interpreter rule exists so a harness launched as `node <script>` is
+# still identified. It must key off the executable itself, not a path that
+# merely mentions an interpreter: tool bridges ship as native binaries below
+# node_modules, so their paths say "node" while the process is not an
+# interpreter at all. These two cases drive those signals apart - same
+# harness-named argument string, different executable - so neither can pass
+# vacuously.
+test_pi_tool_bridge_does_not_steal_session_identity() {
+  local dir fakebin got
+  dir="$TMP_ROOT/pi-tool-bridge"
+  fakebin=$(fm_fakebin "$dir")
+  mkdir -p "$dir/state"
+  cat > "$fakebin/ps" <<'SH'
+#!/usr/bin/env bash
+set -u
+field= pid=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) field=$2; shift 2 ;;
+    -p) pid=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+bridge='/home/u/.pi/agent/npm/node_modules/@vendor/pi-codex-conversion/src/tools/exec/bin/darwin-arm64/exec_bridge'
+case "$pid:$field" in
+  820:comm=|820:args=) printf '%s\n' "$bridge" ;;
+  820:ppid=) printf '%s\n' 830 ;;
+  830:comm=|830:args=) printf '%s\n' pi ;;
+  830:ppid=) printf '%s\n' 1 ;;
+  *:comm=|*:args=) printf '%s\n' bash ;;
+  *:ppid=) printf '%s\n' 820 ;;
+esac
+SH
+  chmod +x "$fakebin/ps"
+  printf '820\n' > "$dir/state/.lock"
+
+  # The bridge is not the session: the walk must climb past it to the real Pi
+  # engine above, and the bridge pid must own neither liveness nor the lock.
+  got=$(lib_eval "$fakebin" 'fm_harness_ancestry_pid') \
+    || fail "the Pi engine above its tool bridge was not found"
+  [ "$got" = 830 ] \
+    || fail "Pi tool bridge stole session identity: resolved '$got', expected Pi pid 830"
+  if lib_eval "$fakebin" 'fm_harness_pid_alive 820'; then
+    fail "Pi tool bridge passed the harness-liveness predicate"
+  fi
+  if lib_eval "$fakebin" "fm_session_lock_owned_by_self '$dir/state'"; then
+    fail "Pi tool bridge claimed the home's session lock"
+  fi
+  pass "session-lock: a Pi tool bridge under node_modules does not steal the session identity"
+}
+
+test_a_real_interpreter_running_a_harness_script_is_still_the_harness() {
+  local dir fakebin shape got
+  dir="$TMP_ROOT/bare-interpreter"
+  fakebin=$(fm_fakebin "$dir")
+  cat > "$fakebin/ps" <<'SH'
+#!/usr/bin/env bash
+set -u
+field= pid=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) field=$2; shift 2 ;;
+    -p) pid=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+# macOS reports argv[0] (an absolute interpreter path) in `ps -o comm=`, while
+# procps on Linux reports the bare kernel exec name. Both must identify.
+case "${FM_TEST_INTERP:-node}" in
+  node) exe=/usr/local/bin/node ;;
+  nodejs) exe=nodejs ;;
+  python3) exe=/usr/bin/python3 ;;
+  python2.7) exe=python2.7 ;;
+esac
+case "$pid:$field" in
+  840:comm=) printf '%s\n' "$exe" ;;
+  840:args=) printf '%s\n' "$exe /opt/harnesses/opencode/dist/main.js --serve" ;;
+  840:ppid=) printf '%s\n' 1 ;;
+  *:comm=|*:args=) printf '%s\n' bash ;;
+  *:ppid=) printf '%s\n' 840 ;;
+esac
+SH
+  chmod +x "$fakebin/ps"
+
+  # The harness name must reach this branch through the script argument, so it
+  # is one of the unanchored FM_HARNESS_RE names; ^pi$ can never match inside an
+  # argument string. Only the executable differs from the bridge case above, so
+  # a fix that narrowed this branch too far fails here.
+  for shape in node nodejs python3 python2.7; do
+    got=$(FM_TEST_INTERP="$shape" lib_eval "$fakebin" 'fm_harness_ancestry_pid') \
+      || fail "$shape: a bare interpreter running a harness script was not identified"
+    [ "$got" = 840 ] \
+      || fail "$shape: bare interpreter resolved '$got', expected harness pid 840"
+    if ! FM_TEST_INTERP="$shape" lib_eval "$fakebin" 'fm_harness_pid_alive 840'; then
+      fail "$shape: a bare interpreter harness failed the harness-liveness predicate"
+    fi
+  done
+  pass "session-lock: a real bare interpreter running a harness script is still the harness"
+}
+
 test_harness_beyond_a_gap_never_owns_the_lock() {
   local dir fakebin got
   dir="$TMP_ROOT/gap"
@@ -407,6 +507,8 @@ test_e2e_daemon_parented_version_named_session_keeps_its_lock() {
 test_version_named_session_is_identified_on_both_platforms
 test_harness_at_namespace_pid1_is_examined
 test_ordinary_paths_are_never_harness_processes
+test_pi_tool_bridge_does_not_steal_session_identity
+test_a_real_interpreter_running_a_harness_script_is_still_the_harness
 test_harness_beyond_a_gap_never_owns_the_lock
 test_competing_version_named_session_is_seen_as_live
 test_e2e_version_named_session_claims_the_home
