@@ -75,8 +75,8 @@ fm_harness_process_matches() {  # <comm> <args>
   fi
   # Bare interpreter (e.g. node): match the harness name in its script path.
   # Which executables count as interpreters is decided from the basename alone
-  # by fm_is_bare_interpreter, the fleet's single owner of that list, so a tool
-  # bridge whose path merely says "node" is never read as one.
+  # by fm_is_bare_interpreter, shared with Cursor identity in the file sourced
+  # above, so a tool bridge whose path merely says "node" is never read as one.
   if fm_is_bare_interpreter "$base"; then
     if printf '%s' "$args" | grep -qE "$FM_HARNESS_RE"; then
       case "$args" in *claude*) FM_HARNESS_IS_CLAUDE=1 ;; esac

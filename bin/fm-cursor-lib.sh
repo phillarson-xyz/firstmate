@@ -201,18 +201,22 @@ fm_cursor_argv0_for_pid() {  # <pid> [comm-fallback]
 # True when basename $1 is a bare interpreter - a program that identifies
 # nothing by itself because what it runs arrives as its script argument.
 #
-# ONE owner of that list. Both Cursor identity below and the session-lock
-# ancestry walk in bin/fm-session-lock-lib.sh, which sources this file, ask the
-# same question of the same process, so a second copy would let the two disagree
-# about which executables are interpreters at all.
+# The shared owner for TWO callers: Cursor identity below and the session-lock
+# ancestry walk in bin/fm-session-lock-lib.sh, which sources this file. They ask
+# the same question of the same process in the same shell, so a second copy
+# would let the two disagree about what an interpreter even is. It is NOT
+# fleet-wide: bin/fm-harness.sh (its node*|python* verdict arm) and
+# bin/fm-gemini-lib.sh (its argv[0] arm) still carry their own lists, and a
+# change here does not reach them.
 #
 # Decided on the basename alone, never on a path: tool bridges ship as native
 # binaries below node_modules, so their paths say "node" while the process is no
-# interpreter. Narrow on purpose - node-gyp and friends carry the node prefix
-# without being interpreters, and trusting them would reopen exactly that hole.
+# interpreter. Versioned spellings (node22, node-20, node-v20, python3.12) are
+# interpreters and stay; a node prefix followed by a name rather than a version
+# - node-gyp, nodemon - is not one, and trusting those would reopen that hole.
 fm_is_bare_interpreter() {  # <basename>
   case "$1" in
-    node|nodejs|node[0-9]*|python|python[0-9]*) return 0 ;;
+    node|nodejs|node[0-9]*|node-[0-9]*|node-v[0-9]*|python|python[0-9]*) return 0 ;;
   esac
   return 1
 }
