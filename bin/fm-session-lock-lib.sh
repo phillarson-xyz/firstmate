@@ -74,18 +74,15 @@ fm_harness_process_matches() {  # <comm> <args>
     return 0
   fi
   # Bare interpreter (e.g. node): match the harness name in its script path.
-  # Decided on the executable's own basename, never on the whole path. Tool
-  # bridges ship as native binaries below node_modules, or below package
-  # directories that merely name a harness, so their paths say "node" while the
-  # process is not an interpreter and must not be read as one.
-  case "$base" in
-    node|nodejs|python|python[0-9]|python[0-9].*)
-      if printf '%s' "$args" | grep -qE "$FM_HARNESS_RE"; then
-        case "$args" in *claude*) FM_HARNESS_IS_CLAUDE=1 ;; esac
-        return 0
-      fi
-      ;;
-  esac
+  # Which executables count as interpreters is decided from the basename alone
+  # by fm_is_bare_interpreter, the fleet's single owner of that list, so a tool
+  # bridge whose path merely says "node" is never read as one.
+  if fm_is_bare_interpreter "$base"; then
+    if printf '%s' "$args" | grep -qE "$FM_HARNESS_RE"; then
+      case "$args" in *claude*) FM_HARNESS_IS_CLAUDE=1 ;; esac
+      return 0
+    fi
+  fi
   # Cursor: its own owner decides, from Cursor's name or versioned install tree
   # in the command path or argv[0]. Without this a Cursor primary can never
   # locate its own harness in the ancestry, so every session start refuses the

@@ -251,6 +251,7 @@ done
 case "${FM_TEST_INTERP:-node}" in
   node) exe=/usr/local/bin/node ;;
   nodejs) exe=nodejs ;;
+  node22) exe=node22 ;;
   python3) exe=/usr/bin/python3 ;;
   python2.7) exe=python2.7 ;;
 esac
@@ -268,7 +269,7 @@ SH
   # is one of the unanchored FM_HARNESS_RE names; ^pi$ can never match inside an
   # argument string. Only the executable differs from the bridge case above, so
   # a fix that narrowed this branch too far fails here.
-  for shape in node nodejs python3 python2.7; do
+  for shape in node nodejs node22 python3 python2.7; do
     got=$(FM_TEST_INTERP="$shape" lib_eval "$fakebin" 'fm_harness_ancestry_pid') \
       || fail "$shape: a bare interpreter running a harness script was not identified"
     [ "$got" = 840 ] \
@@ -278,6 +279,37 @@ SH
     fi
   done
   pass "session-lock: a real bare interpreter running a harness script is still the harness"
+}
+
+# Which executables count as bare interpreters has exactly ONE owner
+# (fm_is_bare_interpreter in bin/fm-cursor-lib.sh), because the session-lock
+# ancestry walk and Cursor identity ask that question of the SAME live process
+# in the same shell: this file sources that library. Drive both owners over the
+# same shapes, so a list that drifts in either one shows up as two owners
+# disagreeing about whether a process is an interpreter at all.
+test_both_identity_owners_share_one_interpreter_list() {
+  local shape
+  for shape in node nodejs node22 python python3 python3.12; do
+    lib_eval "$FAKEBIN" \
+      "fm_harness_process_matches '$shape' '$shape /opt/harnesses/opencode/dist/main.js'" \
+      || fail "$shape: a bare interpreter running a harness script must be a harness process"
+    lib_eval "$FAKEBIN" \
+      "fm_cursor_process_matches '$shape' '' /opt/cursor/bin/cursor-agent" \
+      || fail "$shape: the same interpreter carrying cursor's argv[0] must identify as cursor"
+  done
+  # An executable that merely carries an interpreter's prefix is not one, so
+  # neither owner may adopt the identity of whatever it was handed.
+  for shape in node-gyp nodemon pythonista; do
+    if lib_eval "$FAKEBIN" \
+      "fm_harness_process_matches '$shape' '$shape /opt/harnesses/opencode/dist/main.js'"; then
+      fail "$shape: a non-interpreter must not become a harness through its argument"
+    fi
+    if lib_eval "$FAKEBIN" \
+      "fm_cursor_process_matches '$shape' '' /opt/cursor/bin/cursor-agent"; then
+      fail "$shape: a non-interpreter must not become cursor through its argv[0]"
+    fi
+  done
+  pass "session-lock: one interpreter list decides for both the ancestry walk and cursor identity"
 }
 
 test_harness_beyond_a_gap_never_owns_the_lock() {
@@ -509,6 +541,7 @@ test_harness_at_namespace_pid1_is_examined
 test_ordinary_paths_are_never_harness_processes
 test_pi_tool_bridge_does_not_steal_session_identity
 test_a_real_interpreter_running_a_harness_script_is_still_the_harness
+test_both_identity_owners_share_one_interpreter_list
 test_harness_beyond_a_gap_never_owns_the_lock
 test_competing_version_named_session_is_seen_as_live
 test_e2e_version_named_session_claims_the_home
